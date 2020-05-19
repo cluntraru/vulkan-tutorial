@@ -1,0 +1,29 @@
+Cmake_minimum_required(VERSION 3.7)
+
+project(vkTutorial)
+
+#set(VULKAN_SDK_PATH=/home/cluntraru/.vulkan-sdk/1.2.135.0/x86_64)
+find_package(Vulkan REQUIRED)
+
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS)
+
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+set(IMPLEMENTATIONS "src/main.cpp")
+
+# GLFW
+add_subdirectory("lib/glfw")
+add_subdirectory("lib/glm-0.9.9.8")
+
+add_executable(vkTutorial ${IMPLEMENTATIONS})
+
+# GLFW Linking
+target_link_libraries(vkTutorial Vulkan::Vulkan glfw glm ${CMAKE_DL_LIBS})
+
+# YCM compile flags
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
