@@ -2,7 +2,6 @@ Cmake_minimum_required(VERSION 3.7)
 
 project(vkTutorial)
 
-#set(VULKAN_SDK_PATH=/home/cluntraru/.vulkan-sdk/1.2.135.0/x86_64)
 find_package(Vulkan REQUIRED)
 
 set(CMAKE_BUILD_TYPE Debug)
