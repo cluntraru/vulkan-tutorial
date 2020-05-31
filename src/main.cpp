@@ -697,7 +697,7 @@ private:
 
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresent) {
         for (const VkPresentModeKHR &presentMode: availablePresent) {
-            if (presentMode == VK_PRESENT_MODE_FIFO_KHR) {
+            if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
                 return presentMode;
             }
         }
