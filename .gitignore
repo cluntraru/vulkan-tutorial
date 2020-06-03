@@ -88,3 +88,7 @@ bin
 
 # YCM Language server
 .clangd/*
+
+# SPIR-V bytecode
+*.spv
+
