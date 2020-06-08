@@ -92,3 +92,6 @@ bin
 # SPIR-V bytecode
 *.spv
 
+# Build
+build/*
+

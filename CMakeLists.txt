@@ -13,12 +13,17 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 set(IMPLEMENTATIONS "src/main.cpp")
+set(LIBS)
+#set(LIBS "lib/stb_image/stb_image.cpp"
+#         "lib/stb_image/stb_image_write.cpp")
 
 # GLFW
 add_subdirectory("lib/glfw")
 add_subdirectory("lib/glm-0.9.9.8")
 
-add_executable(vkTutorial ${IMPLEMENTATIONS})
+add_executable(vkTutorial ${IMPLEMENTATIONS} ${LIBS})
+
+target_include_directories(vkTutorial PRIVATE "lib/stb_image")
 
 # GLFW Linking
 target_link_libraries(vkTutorial Vulkan::Vulkan glfw glm ${CMAKE_DL_LIBS})
