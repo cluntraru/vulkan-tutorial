@@ -23,7 +23,7 @@ add_subdirectory("lib/glm-0.9.9.8")
 
 add_executable(vkTutorial ${IMPLEMENTATIONS} ${LIBS})
 
-target_include_directories(vkTutorial PRIVATE "lib/stb_image")
+target_include_directories(vkTutorial PRIVATE "lib/stb_image" "lib/tinyobj")
 
 # GLFW Linking
 target_link_libraries(vkTutorial Vulkan::Vulkan glfw glm ${CMAKE_DL_LIBS})

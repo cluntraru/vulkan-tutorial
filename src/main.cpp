@@ -1,6 +1,7 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include <fstream>
+#include <unordered_map>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -8,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <unordered_map>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -19,8 +21,14 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 #include <chrono>
 
@@ -52,6 +60,55 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance,
     }
 }
 
+struct Vertex {
+    glm::vec3 pos;
+    glm::vec3 color;
+    glm::vec2 texCoord;
+
+    static VkVertexInputBindingDescription getBindingDescription() {
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(Vertex);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        return bindingDescription;
+    }
+
+    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
+        return attributeDescriptions;
+    }
+
+    bool operator==(const Vertex& other) const {
+        return pos == other.pos && color == other.color && texCoord == other.texCoord;
+    }
+};
+
+namespace std {
+    template<> struct hash<Vertex> {
+        size_t operator()(Vertex const& vertex) const {
+            return ((hash<glm::vec3>()(vertex.pos) ^
+                   (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+                   (hash<glm::vec2>()(vertex.texCoord) << 1);
+        }
+    };
+}
+
 class HelloTriangleApplication {
 public:
     struct QueueFamilyIndices {
@@ -67,41 +124,6 @@ public:
         VkSurfaceCapabilitiesKHR capabilities;
         std::vector<VkSurfaceFormatKHR> formats;
         std::vector<VkPresentModeKHR> presentModes;
-    };
-
-    struct Vertex {
-        glm::vec3 pos;
-        glm::vec3 color;
-        glm::vec2 texCoord;
-
-        static VkVertexInputBindingDescription getBindingDescription() {
-            VkVertexInputBindingDescription bindingDescription{};
-            bindingDescription.binding = 0;
-            bindingDescription.stride = sizeof(Vertex);
-            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-            return bindingDescription;
-        }
-
-        static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
-            std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
-            attributeDescriptions[0].binding = 0;
-            attributeDescriptions[0].location = 0;
-            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-            attributeDescriptions[1].binding = 0;
-            attributeDescriptions[1].location = 1;
-            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-            attributeDescriptions[2].binding = 0;
-            attributeDescriptions[2].location = 2;
-            attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-            attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-
-            return attributeDescriptions;
-        }
     };
 
     struct UniformBufferObject {
@@ -173,6 +195,7 @@ private:
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
+        loadModel();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -180,6 +203,42 @@ private:
         createDescriptorSets();
         createCommandBuffers();
         createSemaphores();
+    }
+
+    void loadModel() {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn, err;
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+            throw std::runtime_error(warn + err);
+        }
+
+        for (const auto &shape: shapes) {
+            for (const auto &index: shape.mesh.indices) {
+                Vertex vertex{};
+                vertex.pos = {
+                    attrib.vertices[3 * index.vertex_index],
+                    attrib.vertices[3 * index.vertex_index + 1],
+                    attrib.vertices[3 * index.vertex_index + 2]
+                };
+
+                vertex.texCoord = {
+                    attrib.texcoords[2 * index.texcoord_index],
+                    1.f - attrib.texcoords[2 * index.texcoord_index + 1]
+                };
+
+                vertex.color = {1.f, 1.f, 1.f};
+
+                if (uniqueVertices.count(vertex) == 0) {
+                    uniqueVertices[vertex] = vertices.size();
+                    vertices.push_back(vertex);
+                }
+
+                indices.push_back(uniqueVertices[vertex]);
+            }
+        }
     }
     
     void createDepthResources() {
@@ -245,7 +304,7 @@ private:
 
     void createTextureImage() {
         int texWidth, texHeight, texChannels;
-        stbi_uc *pixels = stbi_load("../res/textures/texture.jpg", &texWidth, &texHeight, &texChannels,
+        stbi_uc *pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels,
                 STBI_rgb_alpha);
 
         VkDeviceSize imageSize = texWidth * texHeight * 4;
@@ -808,7 +867,7 @@ private:
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
 
-            vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
                     0, 1, &descriptorSets[i], 0, nullptr);
@@ -1703,20 +1762,13 @@ private:
         const bool enableValidationLayers = true;
     #endif
 
-    const std::vector<Vertex> vertices = {
-        {{-0.5f, -0.5f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 0.f}},
-        {{0.5f, -0.5f, 0.f}, {0.f, 1.f, 0.f}, {1.f, 0.f}},
-        {{0.5f, 0.5f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 1.f}},
-        {{-0.5f, 0.5f, 0.f}, {1.f, 1.f, 1.f}, {0.f, 1.f}},
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
-        {{-0.5f, -0.5f, -0.5f}, {1.f, 0.f, 0.f}, {0.f, 0.f}},
-        {{0.5f, -0.5f, -0.5f}, {0.f, 1.f, 0.f}, {1.f, 0.f}},
-        {{0.5f, 0.5f, -0.5f}, {0.f, 0.f, 1.f}, {1.f, 1.f}},
-        {{-0.5f, 0.5f, -0.5f}, {1.f, 1.f, 1.f}, {0.f, 1.f}}
-    };
+    std::unordered_map<Vertex, uint32_t> uniqueVertices;
 
-    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0,
-                                           4, 5, 6, 6, 7, 4};
+    const std::string MODEL_PATH = "../res/models/viking_room.obj";
+    const std::string TEXTURE_PATH = "../res/textures/viking_room.png";
 };
 
 int main() {
